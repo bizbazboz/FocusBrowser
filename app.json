@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "FocusBrowser",
+    "slug": "focusbrowser",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "http"
+            },
+            {
+              "scheme": "https"
+            }
+          ]
+        }
+      ],
+      "package": "com.bizo.focusbrowser"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4e409500-1999-4106-b8ca-30bb7f13dfc6"
+      }
+    }
+  }
+}
