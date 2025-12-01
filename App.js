@@ -15,6 +15,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 
 const HOME_URL = 'https://duckduckgo.com/';
 const COOKIE_STORAGE_KEY = 'focusbrowser:persistentCookies';
@@ -168,6 +169,7 @@ function FocusBrowserShell() {
   const timerTapRef = useRef(0);
   const lastHardwareBackPressRef = useRef(0);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [isOffline, setIsOffline] = useState(false);
 
   const handleGoHome = useCallback(() => {
     setBlockedUrl(null);
@@ -199,6 +201,14 @@ function FocusBrowserShell() {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const offline = state.isConnected === false || state.isInternetReachable === false;
+      setIsOffline(Boolean(offline));
+    });
+    return () => unsubscribe();
   }, []);
   
   useEffect(() => {
@@ -291,6 +301,8 @@ function FocusBrowserShell() {
     return `${minutes}:${seconds}`;
   }, [overrideActive, overrideRemainingMs]);
   const showProgress = loadProgress > 0 && loadProgress < 1;
+  const offlineActive = isOffline;
+  const offlineStatusMessage = 'No internet connection detected.';
 
   const clearOverrideWindow = useCallback(
     (lockForDay = false) => {
@@ -457,6 +469,7 @@ function FocusBrowserShell() {
     setCurrentUri(nextUri);
     setSearchText(nextUri);
   }, [overrideActive, handleGoHome, isUrlBanned]);
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -691,7 +704,7 @@ function FocusBrowserShell() {
             setLoadProgress(1);
           }}
         />
-        {blockedUrl && !overrideActive && (
+        {blockedUrl && !overrideActive && !offlineActive && (
           <View style={styles.blockOverlay} pointerEvents="auto">
             <View style={styles.blockCard}>
               <Text style={styles.blockTitle}>URL Blocked</Text>
@@ -719,6 +732,15 @@ function FocusBrowserShell() {
                   <Text style={styles.blockSecondaryText}>Go To Home</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        )}
+        {offlineActive && (
+          <View style={styles.offlineOverlay} pointerEvents="auto">
+            <View style={styles.offlineCard}>
+              <FontAwesome5 name="wifi" size={34} color="#9dd67d" />
+              <Text style={styles.offlineTitle}>Offline</Text>
+              <Text style={styles.offlineMessage}>{offlineStatusMessage}</Text>
             </View>
           </View>
         )}
@@ -938,5 +960,32 @@ const styles = StyleSheet.create({
     color: '#d5d6e2',
     fontSize: 15,
     fontWeight: '600',
+  },
+  offlineOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8, 8, 12, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  offlineCard: {
+    width: '100%',
+    borderRadius: 18,
+    backgroundColor: '#141524',
+    padding: 28,
+    gap: 12,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#27283c',
+  },
+  offlineTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  offlineMessage: {
+    textAlign: 'center',
+    color: '#c9cad8',
+    fontSize: 15,
   },
 });
