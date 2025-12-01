@@ -694,6 +694,11 @@ function FocusBrowserShell() {
           style={[styles.webview, androidNavInset ? { marginBottom: androidNavInset } : null]}
           startInLoadingState
           userAgent={USER_AGENT}
+          javaScriptEnabled
+          domStorageEnabled
+          thirdPartyCookiesEnabled
+          javaScriptCanOpenWindowsAutomatically
+          setSupportMultipleWindows={false}
           pullToRefreshEnabled
           onRefresh={handlePullToRefresh}
           sharedCookiesEnabled
