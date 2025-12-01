@@ -2,6 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  BackHandler,
+  Linking,
   Platform,
   StyleSheet,
   Text,
@@ -14,13 +16,24 @@ import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const HOME_URL = 'https://www.google.com/';
+const HOME_URL = 'https://duckduckgo.com/';
 const COOKIE_STORAGE_KEY = 'focusbrowser:persistentCookies';
 const SESSION_STORAGE_KEY = 'focusbrowser:persistentSession';
 const OVERRIDE_STORAGE_KEY = 'focusbrowser:overrideWindow';
 const LAST_OVERRIDE_DATE_KEY = 'focusbrowser:lastOverrideDate';
+const BANNED_URLS_CACHE_KEY = 'focusbrowser:bannedUrlsCache';
 const BANNED_URLS_ENDPOINT = 'https://cdn.bizbazboz.uk/api/v1/focusbrowser/banned_urls.json';
 const ENABLE_OVERRIDE = true; // flip to false to hide all override capabilities
+// Expo dev/sandbox hosts should never override our homepage when the app boots via tooling
+const EXPO_DEV_HOST_SUFFIXES = [
+  'expo.dev',
+  'expo.app',
+  'expo.run',
+  'expo.test',
+  'exp.host',
+  'exp.direct',
+];
+const EXPO_DEV_PORTS = new Set(['19000', '19001', '19002', '19006', '8081']);
 const SYNC_STORAGE_SCRIPT = `(() => {
   try {
     if (!window.ReactNativeWebView || !window.ReactNativeWebView.postMessage) {
@@ -43,7 +56,9 @@ const SYNC_STORAGE_SCRIPT = `(() => {
 
 const buildSearchUrl = (text) => {
   const trimmed = text.trim();
-  return trimmed ? `https://www.google.com/search?q=${encodeURIComponent(trimmed)}` : HOME_URL;
+  return trimmed
+    ? `https://duckduckgo.com/q=${encodeURIComponent(trimmed)}&rpl=1&ia=web&assist=false`
+    : HOME_URL;
 };
 
 const formatDisplayUri = (uri) => {
@@ -86,6 +101,53 @@ const extractHost = (input = '') => {
   }
 };
 
+// Expo tooling often reports its dev server URLs (exp.direct, localhost:19000, etc.)
+// as the initial intent. Treat them as internal so DuckDuckGo stays the homepage
+// unless a real http(s) intent arrives from Android.
+const isInternalLaunchUrl = (url = '') => {
+  try {
+    const parsed = new URL(url);
+    const protocol = parsed.protocol.toLowerCase();
+    if (!protocol.startsWith('http')) {
+      return true;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (EXPO_DEV_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+      return true;
+    }
+    if (
+      host === 'localhost' ||
+      host.startsWith('127.') ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('172.16.') ||
+      host.startsWith('172.17.') ||
+      host.startsWith('172.18.') ||
+      host.startsWith('172.19.') ||
+      host.startsWith('172.20.') ||
+      host.startsWith('172.21.') ||
+      host.startsWith('172.22.') ||
+      host.startsWith('172.23.') ||
+      host.startsWith('172.24.') ||
+      host.startsWith('172.25.') ||
+      host.startsWith('172.26.') ||
+      host.startsWith('172.27.') ||
+      host.startsWith('172.28.') ||
+      host.startsWith('172.29.') ||
+      host.startsWith('172.30.') ||
+      host.startsWith('172.31.')
+    ) {
+      const port = parsed.port || (protocol === 'https:' ? '443' : '80');
+      if (EXPO_DEV_PORTS.has(port)) {
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    return true;
+  }
+};
+
 function FocusBrowserShell() {
   const [searchText, setSearchText] = useState(HOME_URL);
   const [currentUri, setCurrentUri] = useState(HOME_URL);
@@ -104,6 +166,7 @@ function FocusBrowserShell() {
   const [tick, setTick] = useState(Date.now());
   const prevOverrideActiveRef = useRef(false);
   const timerTapRef = useRef(0);
+  const lastHardwareBackPressRef = useRef(0);
   const [loadProgress, setLoadProgress] = useState(0);
 
   const handleGoHome = useCallback(() => {
@@ -142,10 +205,22 @@ function FocusBrowserShell() {
     let active = true;
     (async () => {
       try {
+        const cached = await AsyncStorage.getItem(BANNED_URLS_CACHE_KEY);
+        if (active && cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            setBannedHosts(parsed);
+          }
+        }
+      } catch (e) {
+        // ignore cache errors
+      }
+      try {
         const response = await fetch(BANNED_URLS_ENDPOINT);
         const json = await response.json();
         if (active && Array.isArray(json)) {
           setBannedHosts(json);
+          AsyncStorage.setItem(BANNED_URLS_CACHE_KEY, JSON.stringify(json)).catch(() => {});
         }
       } catch (e) {
         // ignore fetch errors
@@ -286,14 +361,14 @@ function FocusBrowserShell() {
     }
   }, [guardNavigationAttempt]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (!guardNavigationAttempt()) {
       return;
     }
     if (canGoBack && webViewRef.current) {
       webViewRef.current.goBack();
     }
-  };
+  }, [canGoBack, guardNavigationAttempt]);
 
   const handleForward = () => {
     if (!guardNavigationAttempt()) {
@@ -357,6 +432,68 @@ function FocusBrowserShell() {
     return Boolean(targetHost && bannedHostSet.has(targetHost));
   }, [bannedHostSet]);
 
+  const openExternalUrl = useCallback((incomingUrl) => {
+    if (!incomingUrl) return;
+    const trimmed = incomingUrl.trim();
+    if (!trimmed) return;
+    if (/^exp:\/\//i.test(trimmed)) {
+      handleGoHome();
+      return;
+    }
+    const hasProtocol = /^[a-z]+:\/\//i.test(trimmed);
+    const nextUri = hasProtocol ? trimmed : normalizeUrl(trimmed);
+    if (!/^https?:\/\//i.test(nextUri)) {
+      return;
+    }
+    if (isInternalLaunchUrl(nextUri)) {
+      handleGoHome();
+      return;
+    }
+    if (!overrideActive && isUrlBanned(nextUri)) {
+      setBlockedUrl(nextUri);
+      return;
+    }
+    setBlockedUrl(null);
+    setCurrentUri(nextUri);
+    setSearchText(nextUri);
+  }, [overrideActive, handleGoHome, isUrlBanned]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (overrideActive) {
+        return;
+      }
+      if (currentUri && isUrlBanned(currentUri)) {
+        setBlockedUrl((prev) => (prev === currentUri ? prev : currentUri));
+        if (currentUri !== HOME_URL) {
+          setCurrentUri(HOME_URL);
+          setSearchText(HOME_URL);
+        }
+      }
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [currentUri, isUrlBanned, overrideActive]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return undefined;
+    }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (canGoBack) {
+        handleBack();
+        return true;
+      }
+      const now = Date.now();
+      if (now - lastHardwareBackPressRef.current < 400) {
+        BackHandler.exitApp();
+        return true;
+      }
+      lastHardwareBackPressRef.current = now;
+      return true;
+    });
+    return () => subscription.remove();
+  }, [canGoBack, handleBack]);
+
   const handleShouldStartLoadWithRequest = useCallback((request) => {
     if (isUrlBanned(request.url) && !overrideActive) {
       setBlockedUrl(request.url);
@@ -383,6 +520,27 @@ function FocusBrowserShell() {
       // ignore malformed messages
     }
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (isMounted && initialUrl) {
+          openExternalUrl(initialUrl);
+        }
+      } catch (e) {
+        // ignore linking errors
+      }
+    })();
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      openExternalUrl(url);
+    });
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, [openExternalUrl]);
 
   const isSecure = currentUri?.startsWith('https://');
   const androidNavInset = Platform.OS === 'android' && insets.bottom >= 16 ? insets.bottom : 0;

@@ -4,7 +4,7 @@ FocusBrowser is an in-house mobile browser built with Expo/React Native. It wrap
 
 ## Features
 
-- **Google-first start screen** with smart omnibox (search or direct URL input).
+- **DuckDuckGo-first start screen** with smart omnibox (search or direct URL input).
 - **Custom browser chrome**: HTTPS lock indicator, go/back/forward controls, reload button, inline loading bar, and immersive dark theme.
 - **Navigation safeguards**: Remote banned-host list fetched from `https://cdn.bizbazboz.uk/api/v1/focusbrowser/banned_urls.json`, with overlay messaging and a one-per-day override window (toggled via `ENABLE_OVERRIDE`).
 - **Persistent cookies & sessionStorage** synced between the WebView and AsyncStorage to make sessions survive reloads.
@@ -28,7 +28,7 @@ FocusBrowser is an in-house mobile browser built with Expo/React Native. It wrap
 - `App.js`
   - `ENABLE_OVERRIDE`: set to `false` for builds where the override UI must be hidden.
   - `BANNED_URLS_ENDPOINT`: CDN JSON file containing hostnames to block; edit if moving the list.
-  - `HOME_URL`: default landing page (currently `https://www.google.com/`).
+   - `HOME_URL`: default landing page (currently `https://duckduckgo.com/`).
 - `assets/icon.png`: square PNG (ideally 1024×1024) used for app icon, adaptive icon, and favicon slots.
 - `assets/splash-icon.png`: artwork used on the Expo splash screen.
 - `app.json`: tweak metadata, orientation, splash colors, etc.
