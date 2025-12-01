@@ -421,7 +421,7 @@ function FocusBrowserShell() {
     const now = Date.now();
     const nextInfo = {
       date: currentDayKey,
-      expiresAt: now + 30 * 60 * 1000,
+      expiresAt: now + 15 * 60 * 1000,
     };
     setOverrideInfo(nextInfo);
     setLastOverrideDate(currentDayKey);
@@ -440,10 +440,22 @@ function FocusBrowserShell() {
     }
   }, [overrideAvailable, currentDayKey, blockedUrl]);
 
-  const isUrlBanned = useCallback((url) => {
-    const targetHost = extractHost(url);
-    return Boolean(targetHost && bannedHostSet.has(targetHost));
-  }, [bannedHostSet]);
+  const isUrlBanned = useCallback(
+    (url) => {
+      const targetHost = extractHost(url);
+      if (!targetHost) {
+        return false;
+      }
+      for (const blockedHost of bannedHostSet) {
+        // Banning example.com should also block foo.example.com
+        if (targetHost === blockedHost || targetHost.endsWith(`.${blockedHost}`)) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [bannedHostSet],
+  );
 
   const openExternalUrl = useCallback((incomingUrl) => {
     if (!incomingUrl) return;
