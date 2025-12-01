@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
 const HOME_URL = 'https://duckduckgo.com/';
+const USER_AGENT = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.7444.172 Mobile Safari/537.36';
 const COOKIE_STORAGE_KEY = 'focusbrowser:persistentCookies';
 const SESSION_STORAGE_KEY = 'focusbrowser:persistentSession';
 const OVERRIDE_STORAGE_KEY = 'focusbrowser:overrideWindow';
@@ -58,7 +59,7 @@ const SYNC_STORAGE_SCRIPT = `(() => {
 const buildSearchUrl = (text) => {
   const trimmed = text.trim();
   return trimmed
-    ? `https://duckduckgo.com/q=${encodeURIComponent(trimmed)}&rpl=1&ia=web&assist=false`
+    ? `https://duckduckgo.com/${encodeURIComponent(trimmed)}&rpl=1&ia=web&assist=false`
     : HOME_URL;
 };
 
@@ -692,6 +693,7 @@ function FocusBrowserShell() {
           source={{ uri: currentUri }}
           style={[styles.webview, androidNavInset ? { marginBottom: androidNavInset } : null]}
           startInLoadingState
+          userAgent={USER_AGENT}
           pullToRefreshEnabled
           onRefresh={handlePullToRefresh}
           sharedCookiesEnabled
